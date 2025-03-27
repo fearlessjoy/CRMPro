@@ -58,13 +58,14 @@ export function DocumentRequirementsBadge({
 
   const requiredDocs = requirements.filter(req => req.required);
   const uploadedRequiredDocs = requiredDocs.filter(req => 
-    documents.some(doc => doc.requirementId === req.id)
+    documents.some(doc => doc.requirementId === req.id && doc.status !== "rejected")
   );
   
   const allRequiredUploaded = requiredDocs.length === uploadedRequiredDocs.length;
   const hasRequiredMissing = requiredDocs.length > uploadedRequiredDocs.length;
 
-  if (!hasRequiredMissing) {
+  // Always show the badge if there are required documents
+  if (requiredDocs.length === 0) {
     return null;
   }
 
@@ -78,7 +79,7 @@ export function DocumentRequirementsBadge({
     }
 
     const missingDocs = requiredDocs.filter(req => 
-      !documents.some(doc => doc.requirementId === req.id)
+      !documents.some(doc => doc.requirementId === req.id && doc.status !== "rejected")
     );
 
     return (
@@ -117,7 +118,7 @@ export function DocumentRequirementsBadge({
   }
 
   const missingDocs = requiredDocs.filter(req => 
-    !documents.some(doc => doc.requirementId === req.id)
+    !documents.some(doc => doc.requirementId === req.id && doc.status !== "rejected")
   );
 
   return (

@@ -9,6 +9,10 @@ import { AdminRoute } from "@/components/auth/AdminRoute";
 import { AdminSettingsProvider } from "@/contexts/AdminSettingsContext";
 import { DocumentHead } from "@/components/layout/DocumentHead";
 import { DynamicStyles } from "@/components/layout/DynamicStyles";
+import { useEffect } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import * as leadProcessService from "@/services/leadProcessService";
+import { SearchProvider } from "@/components/providers/SearchProvider";
 
 import { MainLayout } from "@/components/layout/MainLayout";
 import Dashboard from "@/pages/Dashboard";
@@ -57,6 +61,26 @@ import { DashboardLayoutProvider } from "@/contexts/DashboardLayoutContext";
 const queryClient = new QueryClient();
 
 const App = () => {
+  const { toast } = useToast();
+
+  // Initialize Lead Process
+  useEffect(() => {
+    const initializeLeadProcess = async () => {
+      try {
+        await leadProcessService.ensureLeadProcessExists();
+      } catch (error) {
+        console.error("Error initializing Lead Process:", error);
+        toast({
+          title: "Warning",
+          description: "Failed to initialize Lead Process. Some features may not work correctly.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    initializeLeadProcess();
+  }, [toast]);
+
   // Initialize Brevo email service
   useBrevoInit();
 
@@ -70,60 +94,62 @@ const App = () => {
             <Toaster />
             <Sonner />
             <BrowserRouter>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
-                <Route path="/logout" element={<Logout />} />
-                
-                {/* Lead Portal routes - publicly accessible */}
-                <Route path="/lead-login" element={<LeadLogin />} />
-                <Route path="/lead-portal/:leadId" element={<LeadPortal />} />
-                
-                {/* Protected routes */}
-                <Route element={<ProtectedRoute />}>
-                  <Route element={<MainLayout />}>
-                    <Route path="/" element={<DashboardLayoutProvider><Dashboard /></DashboardLayoutProvider>} />
-                    <Route path="/leads" element={<Leads />} />
-                    <Route path="/leads/:leadId" element={<LeadDetail />} />
-                    <Route path="/ivr" element={<IVR />} />
-                    <Route path="/invoices" element={<Invoices />} />
-                    <Route path="/reports" element={<Reports />} />
-                    
-                    {/* Settings main page */}
-                    <Route path="/settings" element={<Settings />} />
-                    
-                    {/* Admin only routes */}
-                    <Route element={<AdminRoute />}>
-                      {/* Settings sub-pages */}
-                      <Route path="/settings/user" element={<UserSettings />} />
-                      <Route path="/settings/user/subcrm-settings/:userId" element={<SubcrmSettingsPage />} />
-                      <Route path="/settings/channel" element={<ChannelSettings />} />
-                      <Route path="/settings/invoice" element={<InvoiceSettings />} />
-                      <Route path="/settings/questions" element={<QuestionsSettings />} />
-                      <Route path="/settings/documents" element={<DocumentsSettings />} />
-                      <Route path="/settings/bulk-emailers" element={<BulkEmailersSettings />} />
-                      <Route path="/settings/leads" element={<LeadsSettings />} />
-                      <Route path="/settings/disk-space" element={<DiskSpaceSettings />} />
-                      <Route path="/settings/triggers" element={<TriggersSettings />} />
-                      <Route path="/settings/marketing-automation" element={<MarketingAutomationSettings />} />
-                      <Route path="/settings/whatsapp-automation" element={<WhatsappAutomationSettings />} />
-                      <Route path="/settings/forms" element={<FormsSettings />} />
-                      <Route path="/settings/task-reminder" element={<TaskReminderSettings />} />
-                      <Route path="/settings/external-links" element={<ExternalLinksSettings />} />
-                      <Route path="/settings/login-details" element={<LoginDetailsSettings />} />
-                      <Route path="/settings/birthday-wishes" element={<BirthdayWishesSettings />} />
-                      <Route path="/settings/company" element={<CompanySettings />} />
-                      <Route path="/settings/social-media" element={<SocialMediaIntegration />} />
-                      <Route path="/settings/social-media/callback" element={<SocialMediaIntegration />} />
-                      <Route path="/settings/brevo" element={<BrevoSettings />} />
+              <SearchProvider>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/signup" element={<Signup />} />
+                  <Route path="/logout" element={<Logout />} />
+                  
+                  {/* Lead Portal routes - publicly accessible */}
+                  <Route path="/lead-login" element={<LeadLogin />} />
+                  <Route path="/lead-portal/:leadId" element={<LeadPortal />} />
+                  
+                  {/* Protected routes */}
+                  <Route element={<ProtectedRoute />}>
+                    <Route element={<MainLayout />}>
+                      <Route path="/" element={<DashboardLayoutProvider><Dashboard /></DashboardLayoutProvider>} />
+                      <Route path="/leads" element={<Leads />} />
+                      <Route path="/leads/:leadId" element={<LeadDetail />} />
+                      <Route path="/ivr" element={<IVR />} />
+                      <Route path="/invoices" element={<Invoices />} />
+                      <Route path="/reports" element={<Reports />} />
+                      
+                      {/* Settings main page */}
+                      <Route path="/settings" element={<Settings />} />
+                      
+                      {/* Admin only routes */}
+                      <Route element={<AdminRoute />}>
+                        {/* Settings sub-pages */}
+                        <Route path="/settings/user" element={<UserSettings />} />
+                        <Route path="/settings/user/subcrm-settings/:userId" element={<SubcrmSettingsPage />} />
+                        <Route path="/settings/channel" element={<ChannelSettings />} />
+                        <Route path="/settings/invoice" element={<InvoiceSettings />} />
+                        <Route path="/settings/questions" element={<QuestionsSettings />} />
+                        <Route path="/settings/documents" element={<DocumentsSettings />} />
+                        <Route path="/settings/bulk-emailers" element={<BulkEmailersSettings />} />
+                        <Route path="/settings/leads" element={<LeadsSettings />} />
+                        <Route path="/settings/disk-space" element={<DiskSpaceSettings />} />
+                        <Route path="/settings/triggers" element={<TriggersSettings />} />
+                        <Route path="/settings/marketing-automation" element={<MarketingAutomationSettings />} />
+                        <Route path="/settings/whatsapp-automation" element={<WhatsappAutomationSettings />} />
+                        <Route path="/settings/forms" element={<FormsSettings />} />
+                        <Route path="/settings/task-reminder" element={<TaskReminderSettings />} />
+                        <Route path="/settings/external-links" element={<ExternalLinksSettings />} />
+                        <Route path="/settings/login-details" element={<LoginDetailsSettings />} />
+                        <Route path="/settings/birthday-wishes" element={<BirthdayWishesSettings />} />
+                        <Route path="/settings/company" element={<CompanySettings />} />
+                        <Route path="/settings/social-media" element={<SocialMediaIntegration />} />
+                        <Route path="/settings/social-media/callback" element={<SocialMediaIntegration />} />
+                        <Route path="/settings/brevo" element={<BrevoSettings />} />
+                      </Route>
                     </Route>
                   </Route>
-                </Route>
-                
-                {/* Default redirect */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
+                  
+                  {/* Default redirect */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </SearchProvider>
             </BrowserRouter>
           </TooltipProvider>
         </AdminSettingsProvider>

@@ -9,6 +9,8 @@ import * as leadProcessService from "@/services/leadProcessService";
 import { Lead } from "@/services/leadService";
 import { format } from "date-fns";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { toast } from "@/components/ui/use-toast";
+import { useDocumentsRefresh } from "@/hooks/useDocumentsRefresh";
 
 interface LeadDocumentsProps {
   leadId: string;
@@ -23,6 +25,7 @@ export function LeadDocuments({ leadId }: LeadDocumentsProps) {
   const [currentStageId, setCurrentStageId] = useState<string | null>(null);
   const [processName, setProcessName] = useState<string>("");
   const [stageName, setStageName] = useState<string>("");
+  const { refresh } = useDocumentsRefresh();
 
   // Format date for display
   const formatDate = (date: any): string => {
@@ -88,40 +91,34 @@ export function LeadDocuments({ leadId }: LeadDocumentsProps) {
         setProcessName(processNameVal);
         setStageName(stageNameVal);
         
-        console.log(`Lead ${leadId} process: ${processId} (${processNameVal}), stage: ${stageId || 'none'} (${stageNameVal || 'none'})`);
-        
         // Fetch document requirements based on the lead's process/stage
         let requiredDocs: Document[] = [];
         if (processId) {
-          console.log(`Fetching document requirements for lead ${leadId}'s process ${processId} and stage ${stageId || 'none'}`);
           requiredDocs = await getRequiredDocuments(processId, stageId || undefined);
-          console.log(`Received ${requiredDocs.length} document requirements for lead ${leadId}`);
         } else {
-          // Default documents if no process is assigned
-          console.log(`No process assigned for lead ${leadId}, using default document requirements`);
           requiredDocs = await getRequiredDocuments('default');
         }
         
         // Fetch already submitted documents for this lead
-        console.log(`Fetching submitted documents for lead ${leadId}`);
         const submittedDocs = await getLeadDocuments(leadId);
-        console.log(`Found ${submittedDocs.length} submitted documents for lead ${leadId}`);
         
-        // Create a map of document names to help with merging
+        // Create a map of submitted documents using requirementId
         const submittedDocsMap = new Map();
         submittedDocs.forEach(doc => {
-          submittedDocsMap.set(doc.name.toLowerCase(), doc);
-          console.log(`Submitted document: ${doc.name}, status: ${doc.status}`);
+          if (doc.requirementId) {
+            submittedDocsMap.set(doc.requirementId, doc);
+            console.log(`Submitted document for requirement ${doc.requirementId}, status: ${doc.status}`);
+          }
         });
         
         // Merge required documents with submitted documents data
         const mergedDocuments = requiredDocs.map(reqDoc => {
           // Check if there's a submitted document matching this requirement
-          const matchingSubmitted = submittedDocsMap.get(reqDoc.name.toLowerCase());
+          const matchingSubmitted = submittedDocsMap.get(reqDoc.id);
           
           // If found, use submitted document's status and data
           if (matchingSubmitted) {
-            console.log(`Merging requirement ${reqDoc.name} with submitted document (status: ${matchingSubmitted.status})`);
+            console.log(`Merging requirement ${reqDoc.id} with submitted document (status: ${matchingSubmitted.status})`);
             return {
               ...reqDoc,
               status: matchingSubmitted.status,
@@ -133,11 +130,10 @@ export function LeadDocuments({ leadId }: LeadDocumentsProps) {
           }
           
           // Otherwise return the requirement with not_submitted status
-          console.log(`Document requirement ${reqDoc.name} has not been submitted yet`);
+          console.log(`Document requirement ${reqDoc.id} has not been submitted yet`);
           return reqDoc;
         });
         
-        console.log(`Final document list for lead ${leadId}: ${mergedDocuments.length} documents`);
         setDocuments(mergedDocuments);
       } catch (error) {
         console.error("Error fetching document data:", error);
@@ -147,7 +143,7 @@ export function LeadDocuments({ leadId }: LeadDocumentsProps) {
     };
     
     fetchData();
-  }, [leadId]);
+  }, [leadId, refresh]);
 
   // Get badge color based on document status
   const getStatusBadge = (status: Document["status"]) => {
@@ -177,24 +173,30 @@ export function LeadDocuments({ leadId }: LeadDocumentsProps) {
       // Call the upload service
       await uploadLeadDocument(leadId, docId, file);
       
-      // Update the document status in the UI
-      setDocuments(docs => docs.map(doc => 
-        doc.id === docId 
-          ? { 
-              ...doc, 
-              status: "pending", 
-              uploadedAt: new Date(),
-              fileUrl: URL.createObjectURL(file),
-              fileType: file.type
-            } 
-          : doc
-      ));
+      // Refresh the documents list
+      const updatedDocs = await getLeadDocuments(leadId);
+      setDocuments(updatedDocs);
       
       // Reset the file input
       fileInput.value = '';
       
+      // Trigger documents refresh for badge update
+      refresh();
+      
+      // Show success message
+      toast({
+        title: "Document Uploaded",
+        description: "Your document has been uploaded successfully.",
+        variant: "default"
+      });
+      
     } catch (error) {
       console.error("Error uploading document:", error);
+      toast({
+        title: "Upload Failed",
+        description: "There was an error uploading your document. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setUploadingDocId(null);
     }
@@ -277,7 +279,7 @@ export function LeadDocuments({ leadId }: LeadDocumentsProps) {
                   )}
                 </CardContent>
                 
-                <CardFooter className="pt-0">
+                <CardFooter>
                   {doc.status === "not_submitted" || doc.status === "rejected" ? (
                     <div className="w-full">
                       <input
@@ -333,4 +335,4 @@ export function LeadDocuments({ leadId }: LeadDocumentsProps) {
       )}
     </div>
   );
-} 
+}

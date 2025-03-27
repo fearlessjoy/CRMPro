@@ -49,11 +49,58 @@ export function LeadProcessSelection({
   const [stageUpdateDialogOpen, setStageUpdateDialogOpen] = useState(false);
   const [stageNote, setStageNote] = useState("");
   const [stageToUpdateId, setStageToUpdateId] = useState<string | null>(null);
+  const [leadStatus, setLeadStatus] = useState<string>("");
+  const [assignedProcesses, setAssignedProcesses] = useState<leadService.LeadProcess[]>([]);
   
   const { toast } = useToast();
   const auth = useAuth();
 
-  // Load processes and stages
+  // Add new function to load processes
+  const loadProcesses = async (leadStatus: string) => {
+    try {
+      // Load all processes
+      const processesData = await leadProcessService.getAllProcesses();
+      const leadProcess = processesData.find(p => p.name === "Lead Process");
+      
+      if (!leadProcess) {
+        toast({
+          title: "Error",
+          description: "Lead Process not found. Please configure the Lead Process in settings.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Filter processes based on lead status
+      const filteredProcesses = leadStatus === 'converted'
+        ? processesData.filter(p => p.isActive)
+        : processesData.filter(p => p.isActive && p.name === "Lead Process");
+      
+      console.log("Filtered processes:", filteredProcesses.map(p => p.name));
+      
+      setProcesses(filteredProcesses);
+      
+      // Load stages for each process
+      const stagesMap: Record<string, Stage[]> = {};
+      await Promise.all(
+        processesData.map(async (process) => {
+          const processStages = await leadProcessService.getStagesByProcess(process.id);
+          stagesMap[process.id] = processStages.filter(s => s.isActive);
+        })
+      );
+      
+      setStages(stagesMap);
+
+      // Load assigned processes
+      const leadProcesses = await leadService.getLeadProcesses(leadId);
+      setAssignedProcesses(leadProcesses);
+    } catch (error) {
+      console.error("Error loading processes:", error);
+      throw error;
+    }
+  };
+
+  // Update the loadData function in useEffect to use loadProcesses
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -63,6 +110,11 @@ export function LeadProcessSelection({
         const leadData = await leadService.getLeadById(leadId);
         
         if (leadData) {
+          // Migrate lead processes if needed
+          await leadService.migrateLeadProcesses(leadId);
+          
+          console.log("Lead status:", leadData.status);
+          setLeadStatus(leadData.status);
           // Set the selected process and stage from lead data
           if (leadData.currentProcessId) {
             setSelectedProcessId(leadData.currentProcessId);
@@ -70,22 +122,10 @@ export function LeadProcessSelection({
           if (leadData.currentStageId) {
             setCurrentStageId(leadData.currentStageId);
           }
+          
+          // Load processes based on lead status
+          await loadProcesses(leadData.status);
         }
-        
-        // Load all processes
-        const processesData = await leadProcessService.getAllProcesses();
-        setProcesses(processesData.filter(p => p.isActive));
-        
-        // Load stages for each process
-        const stagesMap: Record<string, Stage[]> = {};
-        await Promise.all(
-          processesData.map(async (process) => {
-            const processStages = await leadProcessService.getStagesByProcess(process.id);
-            stagesMap[process.id] = processStages.filter(s => s.isActive);
-          })
-        );
-        
-        setStages(stagesMap);
       } catch (error) {
         console.error("Error loading processes and stages:", error);
         toast({
@@ -115,6 +155,10 @@ export function LeadProcessSelection({
       // Reset current stage when process changes
       setCurrentStageId(null);
       
+      // Refresh assigned processes
+      const leadProcesses = await leadService.getLeadProcesses(leadId);
+      setAssignedProcesses(leadProcesses);
+      
       // Notify parent component if callback provided
       if (onProcessSelected) {
         onProcessSelected(processId);
@@ -136,6 +180,52 @@ export function LeadProcessSelection({
     }
   };
 
+  // Add handleProcessUnassign function after handleProcessSelect
+  const handleProcessUnassign = async (processId: string) => {
+    try {
+      setUpdating(true);
+      
+      // Don't allow unassigning the Lead Process if it's the only process
+      if (assignedProcesses.length === 1 && assignedProcesses[0].processId === processId) {
+        toast({
+          title: "Cannot unassign Lead Process",
+          description: "The Lead Process must remain assigned.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Unassign the process
+      await leadService.unassignProcessFromLead(leadId, processId);
+      
+      // Refresh assigned processes
+      const leadProcesses = await leadService.getLeadProcesses(leadId);
+      setAssignedProcesses(leadProcesses);
+      
+      // If this was the selected process, select another one
+      if (selectedProcessId === processId) {
+        const remainingProcesses = leadProcesses.filter(p => p.processId !== processId);
+        if (remainingProcesses.length > 0) {
+          await handleProcessSelect(remainingProcesses[0].processId);
+        }
+      }
+      
+      toast({
+        title: "Process unassigned",
+        description: `Process "${processes.find(p => p.id === processId)?.name}" has been unassigned`,
+      });
+    } catch (error) {
+      console.error("Error unassigning process:", error);
+      toast({
+        title: "Error",
+        description: "Failed to unassign process",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   // Handle stage update
   const openStageUpdateDialog = (stageId: string) => {
     setStageToUpdateId(stageId);
@@ -143,7 +233,7 @@ export function LeadProcessSelection({
     setStageUpdateDialogOpen(true);
   };
 
-  // Submit stage update
+  // Update handleStageUpdate to reload processes after stage update
   const handleStageUpdate = async () => {
     if (!stageToUpdateId || !selectedProcessId) return;
     
@@ -162,6 +252,14 @@ export function LeadProcessSelection({
         stageNote,
         updatedBy
       );
+      
+      // Get the updated stage to check if it's "Lead Converted"
+      const stage = await leadProcessService.getStageById(stageToUpdateId);
+      if (stage?.name === "Lead Converted") {
+        // Update local status and reload processes
+        setLeadStatus('converted');
+        await loadProcesses('converted');
+      }
       
       // Update local state
       setCurrentStageId(stageToUpdateId);
@@ -225,33 +323,125 @@ export function LeadProcessSelection({
       {/* Process Selection */}
       <Card>
         <CardContent className="p-6">
-          <h3 className="text-lg font-medium mb-4">Select Lead Process</h3>
+          <h3 className="text-lg font-medium mb-4">
+            {leadStatus === 'converted' ? 'Lead Processes' : 'Lead Process'}
+          </h3>
           
-          <RadioGroup 
-            value={selectedProcessId || ""} 
-            onValueChange={handleProcessSelect}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {processes.map((process) => (
-                <div key={process.id} className="flex items-start space-x-2">
-                  <RadioGroupItem 
-                    value={process.id} 
-                    id={`process-${process.id}`} 
-                    className="mt-1"
-                  />
-                  <div className="grid gap-1.5">
-                    <Label 
-                      htmlFor={`process-${process.id}`}
-                      className="font-medium cursor-pointer"
-                    >
-                      {process.name}
-                    </Label>
-                    <p className="text-sm text-gray-500">{process.description}</p>
-                  </div>
+          {leadStatus !== 'converted' && (
+            <p className="text-sm text-gray-500 mb-4">
+              Other processes will become available once the lead is converted.
+            </p>
+          )}
+          
+          <div className="space-y-4">
+            {/* Assigned Processes */}
+            {assignedProcesses.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <h4 className="text-sm font-medium">Assigned Processes</h4>
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    {assignedProcesses.length} Active
+                  </Badge>
                 </div>
-              ))}
-            </div>
-          </RadioGroup>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {assignedProcesses.map((assignedProcess) => {
+                    const process = processes.find(p => p.id === assignedProcess.processId);
+                    if (!process) return null;
+                    
+                    const isLeadProcess = process.name === "Lead Process";
+                    const isCurrent = selectedProcessId === assignedProcess.processId;
+                    
+                    return (
+                      <div 
+                        key={assignedProcess.processId}
+                        className={`p-4 rounded-lg border-2 ${
+                          isCurrent
+                            ? 'border-blue-500 bg-blue-50'
+                            : isLeadProcess
+                            ? 'border-green-200 bg-green-50'
+                            : 'border-blue-200 bg-blue-50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h5 className="font-medium">{process.name}</h5>
+                              {isLeadProcess && (
+                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                  Primary
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-600">{process.description}</p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              variant={isCurrent ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => handleProcessSelect(assignedProcess.processId)}
+                              disabled={updating}
+                            >
+                              {isCurrent ? 'Current' : 'Switch to'}
+                            </Button>
+                            {!isLeadProcess && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleProcessUnassign(assignedProcess.processId)}
+                                disabled={updating}
+                                className="border-red-200 hover:border-red-400 hover:bg-red-50 text-red-600"
+                              >
+                                Unassign
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            {/* Available Processes */}
+            {leadStatus === 'converted' && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <h4 className="text-sm font-medium">Available Processes</h4>
+                  <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+                    {processes.filter(process => !assignedProcesses.some(ap => ap.processId === process.id)).length} Available
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {processes
+                    .filter(process => !assignedProcesses.some(ap => ap.processId === process.id))
+                    .map((process) => (
+                      <div 
+                        key={process.id}
+                        className="p-4 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h5 className="font-medium">{process.name}</h5>
+                            <p className="text-sm text-gray-600">{process.description}</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleProcessSelect(process.id)}
+                            disabled={updating}
+                            className="bg-white hover:bg-gray-50"
+                          >
+                            Assign
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

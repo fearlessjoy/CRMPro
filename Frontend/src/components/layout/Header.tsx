@@ -1,7 +1,5 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, Search, Moon, Sun } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Bell, Search, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,13 +14,14 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/use-toast";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useSearch } from "@/components/providers/SearchProvider";
 
 export function Header() {
-  const [searchQuery, setSearchQuery] = useState("");
   const { currentUser, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setOpen } = useSearch();
 
   // Get user initials for avatar fallback
   const getUserInitials = () => {
@@ -55,15 +54,17 @@ export function Header() {
   return (
     <header className="border-b h-16 flex items-center justify-between px-6 bg-background">
       <div className="w-[300px]">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search..." 
-            className="pl-8 h-9 w-[280px]"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+        <Button
+          variant="outline"
+          className="w-full justify-start text-muted-foreground"
+          onClick={() => setOpen(true)}
+        >
+          <Search className="mr-2 h-4 w-4" />
+          <span>Search...</span>
+          <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+            <span className="text-xs">⌘</span>K
+          </kbd>
+        </Button>
       </div>
 
       <div className="flex items-center space-x-4">
@@ -88,27 +89,26 @@ export function Header() {
         <Separator orientation="vertical" className="h-8" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2 h-9">
+            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={currentUser?.photoURL || ""} alt="Profile picture" />
-                <AvatarFallback className="bg-primary/10 text-primary">{getUserInitials()}</AvatarFallback>
+                <AvatarImage src={currentUser?.photoURL || ''} alt={currentUser?.displayName || 'User'} />
+                <AvatarFallback>{getUserInitials()}</AvatarFallback>
               </Avatar>
-              <div className="flex items-center gap-1">
-                <span className="text-sm font-medium">{currentUser?.displayName || "User"}</span>
-                <ChevronDown className="h-4 w-4" />
-              </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuContent className="w-56" align="end" forceMount>
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-medium leading-none">{currentUser?.displayName}</p>
+                <p className="text-xs leading-none text-muted-foreground">
+                  {currentUser?.email}
+                </p>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/settings/user")}>Profile</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/settings")}>Settings</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => window.open("/lead-login", "_blank")}>
-              Lead Portal Login
+            <DropdownMenuItem onClick={handleLogout}>
+              Log out
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>Log out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

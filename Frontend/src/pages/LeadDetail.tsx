@@ -657,43 +657,14 @@ const LeadDetail = () => {
               <TabsTrigger value="notes">Notes</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="details" className="space-y-6">
-              {/* Lead Progress Card */}
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-lg font-medium">Lead Progress</h3>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">Current Stage:</span>
-                        <Badge variant="secondary">
-                          {lead?.currentStageId ? 
-                            processes[lead.currentProcessId]?.stages[lead.currentStageId]?.name || 'Unknown Stage' 
-                            : 'Not Started'}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm text-gray-500">
-                        <span>Start</span>
-                        <span>{progressPercentage}% Complete</span>
-                        <span>Complete</span>
-                      </div>
-                      <Progress 
-                        value={progressPercentage} 
-                        className="h-2 bg-slate-200"
-                        indicatorClassName="bg-primary transition-all"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <LeadProcessSelection 
-                leadId={leadId as string}
-                onProcessSelected={handleProcessSelected}
-                onStageChanged={handleStageChanged}
-              />
+            <TabsContent value="details">
+              <div className="grid gap-4">
+                <LeadProcessSelection 
+                  leadId={leadId as string}
+                  onProcessSelected={handleProcessSelected}
+                  onStageChanged={handleStageChanged}
+                />
+              </div>
             </TabsContent>
             
             <TabsContent value="documents">

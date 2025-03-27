@@ -8,7 +8,8 @@ import {
   deleteDoc,
   writeBatch,
   query,
-  orderBy
+  orderBy,
+  where
 } from "firebase/firestore";
 import { db } from "@/firebase/config";
 
@@ -127,23 +128,22 @@ export const deleteProcess = async (processId: string): Promise<void> => {
 // Get all stages for a process
 export const getStagesByProcess = async (processId: string): Promise<Stage[]> => {
   try {
+    console.log("Getting stages for process ID:", processId);
+    
     const q = query(
-      collection(db, STAGES_COLLECTION), 
+      collection(db, STAGES_COLLECTION),
+      where("processId", "==", processId),
       orderBy("order")
     );
     
     const querySnapshot = await getDocs(q);
-    const allStages = querySnapshot.docs.map(doc => ({
+    const stages = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as Stage[];
     
-    // Filter stages for the given process
-    const processStages = allStages.filter(stage => 
-      stage.processId === processId
-    );
-    
-    return processStages;
+    console.log("Found stages:", stages);
+    return stages;
   } catch (error) {
     console.error("Error getting stages:", error);
     throw error;
@@ -243,6 +243,77 @@ export const reorderProcesses = async (processIds: string[]): Promise<void> => {
     await batch.commit();
   } catch (error) {
     console.error("Error reordering processes:", error);
+    throw error;
+  }
+};
+
+// Ensure Lead Process exists with default stages
+export const ensureLeadProcessExists = async (): Promise<Process | null> => {
+  try {
+    // Get all processes
+    const processes = await getAllProcesses();
+    
+    // Check if Lead Process exists
+    let leadProcess = processes.find(p => p.name === "Lead Process");
+    
+    if (!leadProcess) {
+      // Create Lead Process if it doesn't exist
+      const newProcess = await createProcess({
+        name: "Lead Process",
+        description: "Default process for managing new leads",
+        isActive: true,
+        order: 0
+      });
+      
+      leadProcess = newProcess;
+      
+      // Create default stages in sequence
+      const defaultStages = [
+        {
+          name: "Lead Received",
+          description: "Initial stage for new leads",
+          color: "#4CAF50",
+          order: 0,
+          isActive: true
+        },
+        {
+          name: "Lead Follow Up",
+          description: "Follow up stage for active leads",
+          color: "#2196F3",
+          order: 1,
+          isActive: true
+        },
+        {
+          name: "Lead Converted",
+          description: "Successfully converted leads",
+          color: "#9C27B0",
+          order: 2,
+          isActive: true
+        },
+        {
+          name: "Lead Dropped",
+          description: "Leads that were not converted",
+          color: "#F44336",
+          order: 3,
+          isActive: true
+        }
+      ];
+      
+      // Create stages sequentially to ensure proper order
+      for (const stage of defaultStages) {
+        await createStage(leadProcess.id, stage);
+      }
+    }
+    
+    // Verify stages exist
+    const stages = await getStagesByProcess(leadProcess.id);
+    if (!stages || stages.length === 0) {
+      throw new Error("Failed to create stages for Lead Process");
+    }
+    
+    return leadProcess;
+  } catch (error) {
+    console.error("Error ensuring Lead Process exists:", error);
     throw error;
   }
 }; 

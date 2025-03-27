@@ -30,6 +30,7 @@ import { Link } from "react-router-dom";
 import * as processService from "@/services/processService";
 import { Process } from "@/services/processService";
 import { useAuth } from "@/contexts/AuthContext";
+import { DashboardStats } from "@/components/dashboard/DashboardStats";
 
 interface LeadProgress {
   totalLeads: number;
@@ -63,6 +64,20 @@ interface LeadStats {
   };
 }
 
+interface DashboardMetrics {
+  totalLeadsInProcess: number;
+  activeLeadsNotAssigned: number;
+  activeLeads: {
+    total: number;
+    received: number;
+    followUp: number;
+    converted: number;
+    dropped: number;
+  };
+  pendingTasks: number;
+  processCounts: { name: string; count: number }[];
+}
+
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<LeadStats>({
     totalLeads: 0,
@@ -90,6 +105,19 @@ const Dashboard: React.FC = () => {
   const [useDragAndDrop, setUseDragAndDrop] = useState(true);
   const [processes, setProcesses] = useState<Process[]>([]);
   const { currentUser } = useAuth();
+  const [metrics, setMetrics] = useState<DashboardMetrics>({
+    totalLeadsInProcess: 0,
+    activeLeadsNotAssigned: 0,
+    activeLeads: {
+      total: 0,
+      received: 0,
+      followUp: 0,
+      converted: 0,
+      dropped: 0
+    },
+    pendingTasks: 0,
+    processCounts: []
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -135,66 +163,64 @@ const Dashboard: React.FC = () => {
         ]);
         
         setLeads(leadsData);
+        setProcesses(allProcesses);
         
-        // Create process count maps
+        // Calculate process counts for Total Leads in Process
         const processCountMap = new Map<string, number>();
-        const activeProcessCountMap = new Map<string, number>();
-        
-        // Initialize counts for all processes
         allProcesses.forEach(process => {
-          processCountMap.set(process.name, 0);
-          activeProcessCountMap.set(process.name, 0);
-        });
-        
-        // Count leads in each process
-        leadsData.forEach(lead => {
-          if (lead.currentProcessId) {
-            const process = allProcesses.find(p => p.id === lead.currentProcessId);
-            if (process) {
-              processCountMap.set(process.name, (processCountMap.get(process.name) || 0) + 1);
-              if (lead.status === 'active') {
-                activeProcessCountMap.set(process.name, (activeProcessCountMap.get(process.name) || 0) + 1);
-              }
-            }
+          const count = leadsData.filter(lead => 
+            lead.currentProcessId === process.id && 
+            lead.status !== 'dropped' && 
+            lead.status !== 'converted'
+          ).length;
+          if (count > 0) {
+            processCountMap.set(process.name, count);
           }
         });
-        
-        // Convert maps to arrays for the stats
+
         const processCounts = Array.from(processCountMap.entries())
           .map(([name, count]) => ({ name, count }))
-          .filter(item => item.count > 0) // Only include processes with leads
-          .sort((a, b) => b.count - a.count); // Sort by count in descending order
+          .sort((a, b) => b.count - a.count);
         
-        const activeProcessCounts = Array.from(activeProcessCountMap.entries())
-          .map(([name, count]) => ({ name, count }))
-          .filter(item => item.count > 0) // Only include processes with active leads
-          .sort((a, b) => b.count - a.count); // Sort by count in descending order
-        
-        // Calculate other stats
-        const totalLeads = leadsData.length;
-        const activeLeads = leadsData.filter(lead => lead.status === 'active').length;
+        // Calculate main metrics
+        const totalLeadsInProcess = leadsData.filter(lead => 
+          lead.currentProcessId && 
+          lead.status !== 'dropped' && 
+          lead.status !== 'converted'
+        ).length;
+
+        const activeLeadsNotAssigned = leadsData.filter(lead => 
+          !lead.currentProcessId && 
+          lead.status === 'active'
+        ).length;
+
+        // Calculate lead status counts for Active Leads card
+        const receivedLeads = leadsData.filter(lead => lead.status === 'received').length;
+        const followUpLeads = leadsData.filter(lead => lead.status === 'followup').length;
         const convertedLeads = leadsData.filter(lead => lead.status === 'converted').length;
+        const droppedLeads = leadsData.filter(lead => lead.status === 'dropped').length;
         
         // Calculate pending tasks
         const pendingTaskCount = leadsData.reduce((count, lead) => {
-          if (lead.assignedTo === currentUser?.uid) {
-            const hasPendingTasks = lead.tasks?.some(task => !task.completed) || false;
-            return count + (hasPendingTasks ? 1 : 0);
+          if (lead.assignedTo === currentUser?.uid && lead.tasks) {
+            return count + lead.tasks.filter(task => !task.completed).length;
           }
           return count;
         }, 0);
-        
+
         setStats({
-          totalLeads,
-          activeLeads,
-          convertedLeads,
+          totalLeads: totalLeadsInProcess,
+          activeLeads: activeLeadsNotAssigned,
+          convertedLeads: receivedLeads + followUpLeads + convertedLeads + droppedLeads,
           pendingTasks: pendingTaskCount,
-          processCounts,
-          activeProcessCounts,
-          previousPeriodStats: stats.previousPeriodStats
+          processCounts: processCounts,
+          activeProcessCounts: [
+            { name: 'Lead Received', count: receivedLeads },
+            { name: 'Lead Follow Up', count: followUpLeads },
+            { name: 'Lead Converted', count: convertedLeads },
+            { name: 'Lead Dropped', count: droppedLeads }
+          ]
         });
-        
-        setProcesses(allProcesses);
         
       } catch (error) {
         console.error("Error loading dashboard data:", error);
@@ -205,6 +231,66 @@ const Dashboard: React.FC = () => {
     
     loadDashboardData();
   }, [currentUser]);
+
+  useEffect(() => {
+    const calculateMetrics = () => {
+      // Calculate process counts for leads in process
+      const processCountMap = new Map<string, number>();
+      processes.forEach(process => {
+        const count = leads.filter(lead => 
+          lead.currentProcessId === process.id && 
+          lead.status !== 'dropped' && 
+          lead.status !== 'converted'
+        ).length;
+        if (count > 0) {
+          processCountMap.set(process.name, count);
+        }
+      });
+
+      const processCounts = Array.from(processCountMap.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+
+      // Calculate metrics based on the screenshot requirements
+      const totalLeadsInProcess = leads.filter(lead => 
+        lead.currentProcessId && 
+        lead.status !== 'dropped' && 
+        lead.status !== 'converted'
+      ).length;
+
+      const activeLeadsNotAssigned = leads.filter(lead => 
+        !lead.currentProcessId && 
+        lead.status === 'active'
+      ).length;
+      
+      const activeLeadsMetrics = {
+        total: leads.filter(lead => lead.status === 'active').length,
+        received: leads.filter(lead => lead.status === 'received').length,
+        followUp: leads.filter(lead => lead.status === 'followup').length,
+        converted: leads.filter(lead => lead.status === 'converted').length,
+        dropped: leads.filter(lead => lead.status === 'dropped').length
+      };
+
+      const pendingTasksCount = leads.reduce((count, lead) => {
+        if (lead.assignedTo === currentUser?.uid && lead.tasks) {
+          return count + lead.tasks.filter(task => !task.completed).length;
+        }
+        return count;
+      }, 0);
+
+      setMetrics({
+        totalLeadsInProcess,
+        activeLeadsNotAssigned,
+        activeLeads: activeLeadsMetrics,
+        pendingTasks: pendingTasksCount,
+        processCounts
+      });
+    };
+
+    if (leads.length > 0 && processes.length > 0) {
+      calculateMetrics();
+    }
+  }, [leads, processes, currentUser]);
 
   // Generate progress items from the lead progress data
   const leadProgressItems = [
@@ -348,7 +434,7 @@ const Dashboard: React.FC = () => {
             <StatusCard
               title="Total Leads in Process"
               value={stats.totalLeads}
-              status={stats.previousPeriodStats ? (stats.totalLeads >= stats.previousPeriodStats.totalLeads ? "positive" : "negative") : "neutral"}
+              status="neutral"
               icon={<Users className="h-4 w-4" />}
               description="Leads currently in various processes"
               processCounts={stats.processCounts}
@@ -356,21 +442,21 @@ const Dashboard: React.FC = () => {
           </Link>
           <Link to="/leads?status=active" className="block hover:opacity-90 transition-opacity">
             <StatusCard
-              title="Active Leads"
+              title="Active Leads not assigned Process"
               value={stats.activeLeads}
-              status={stats.previousPeriodStats ? (stats.activeLeads >= stats.previousPeriodStats.activeLeads ? "positive" : "negative") : "neutral"}
+              status="neutral"
               icon={<FileText className="h-4 w-4" />}
               description="Leads actively being processed"
-              processCounts={stats.activeProcessCounts}
             />
           </Link>
-          <Link to="/leads?status=converted" className="block hover:opacity-90 transition-opacity">
+          <Link to="/leads?status=active" className="block hover:opacity-90 transition-opacity">
             <StatusCard
-              title="Converted Leads"
+              title="Active Leads"
               value={stats.convertedLeads}
-              status={stats.previousPeriodStats ? (stats.convertedLeads >= stats.previousPeriodStats.convertedLeads ? "positive" : "negative") : "neutral"}
+              status="neutral"
               icon={<TrendingUp className="h-4 w-4" />}
               description="Successfully converted leads"
+              processCounts={stats.activeProcessCounts}
             />
           </Link>
           <Link to="/tasks" className="block hover:opacity-90 transition-opacity">

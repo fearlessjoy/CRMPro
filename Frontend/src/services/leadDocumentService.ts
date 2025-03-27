@@ -7,8 +7,12 @@ import {
   query, 
   where, 
   DocumentData,
-  getFirestore
+  getFirestore,
+  addDoc,
+  serverTimestamp
 } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { storage } from "@/firebase/config";
 
 // For now we'll use a mock Firebase implementation
 // In production, you should use the actual Firebase SDK
@@ -38,6 +42,7 @@ export interface Document {
   fileUrl?: string;
   fileType?: string;
   notes?: string;
+  requirementId?: string;
 }
 
 // Document requirement interface from Firestore
@@ -63,6 +68,7 @@ interface LeadDocument extends DocumentData {
   fileType?: string;
   notes?: string;
   leadId: string;
+  requirementId?: string;
 }
 
 // Get document requirements for a specific process and stage
@@ -398,14 +404,15 @@ export const getLeadDocuments = async (leadId: string): Promise<Document[]> => {
       const data = doc.data() as LeadDocument;
       documents.push({
         id: doc.id,
-        name: data.name,
+        name: data.name || "",
         description: data.description || "",
         required: data.required !== undefined ? data.required : true,
         status: data.status || "pending",
         uploadedAt: data.uploadedAt ? data.uploadedAt.toDate() : null,
         fileUrl: data.fileUrl,
         fileType: data.fileType,
-        notes: data.notes
+        notes: data.notes,
+        requirementId: data.requirementId
       });
     });
     
@@ -420,13 +427,57 @@ export const getLeadDocuments = async (leadId: string): Promise<Document[]> => {
 // Upload a document for a lead
 export const uploadLeadDocument = async (
   leadId: string,
-  documentId: string,
+  requirementId: string,
   file: File
 ): Promise<void> => {
   try {
-    // In a real application, this would upload to Firebase Storage
-    // and create a document in Firestore
-    console.log(`Uploading ${file.name} for lead ${leadId}, document ${documentId}`);
+    // Upload file to Firebase Storage
+    const storageRefPath = `leads/${leadId}/documents/${Date.now()}_${file.name}`;
+    const storageRefObj = ref(storage, storageRefPath);
+    
+    const uploadTask = uploadBytesResumable(storageRefObj, file);
+    
+    return new Promise<void>((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          // Handle progress if needed
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          console.log('Upload is ' + progress + '% done');
+        },
+        (error) => {
+          // Handle error
+          console.error("Error uploading file:", error);
+          reject(error);
+        },
+        async () => {
+          try {
+            // Handle success
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            // Save document metadata to Firestore
+            const docData = {
+              leadId,
+              requirementId, // This is the document requirement ID
+              fileName: file.name,
+              fileSize: file.size,
+              fileType: file.type,
+              fileUrl: downloadUrl,
+              storageRef: storageRefPath,
+              status: "pending",
+              uploadedAt: serverTimestamp()
+            };
+            
+            await addDoc(collection(db, "leadDocuments"), docData);
+            console.log("Document metadata saved successfully");
+            resolve();
+          } catch (error) {
+            console.error("Error saving document metadata:", error);
+            reject(error);
+          }
+        }
+      );
+    });
   } catch (error) {
     console.error("Error uploading document:", error);
     throw error;

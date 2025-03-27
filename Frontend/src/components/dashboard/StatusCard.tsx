@@ -36,29 +36,20 @@ export function StatusCard({
       status === "neutral" && "border-l-blue-500",
       className
     )}>
-      <div className="absolute top-0 right-0 w-1/2 h-1">
-        <div className={cn(
-          "h-full w-full bg-gradient-to-r",
-          status === "positive" && "from-green-500/10 to-green-500/40",
-          status === "negative" && "from-red-500/10 to-red-500/40",
-          status === "neutral" && "from-blue-500/10 to-blue-500/40"
-        )} />
-      </div>
-      <CardContent className="p-6 flex flex-col h-full min-h-[200px]">
+      <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <div className="flex items-end gap-2">
+            <p className="text-base font-medium text-muted-foreground">{title}</p>
+            <div className="flex items-center gap-2">
               <span className={cn(
-                "text-2xl font-semibold",
+                "text-2xl font-bold",
                 status === "positive" && "text-green-600",
                 status === "negative" && "text-red-600",
-                status === "neutral" && "text-blue-600"
+                status === "neutral" && "text-primary"
               )}>{value}</span>
-              {period && <span className="text-xs text-muted-foreground pb-1">{period}</span>}
             </div>
             {description && (
-              <p className="text-xs text-muted-foreground mt-1">{description}</p>
+              <p className="text-sm text-muted-foreground">{description}</p>
             )}
           </div>
           {icon && (
@@ -66,7 +57,7 @@ export function StatusCard({
               "rounded-full p-2.5",
               status === "positive" && "bg-green-100 text-green-600",
               status === "negative" && "bg-red-100 text-red-600",
-              status === "neutral" && "bg-blue-100 text-blue-600"
+              status === "neutral" && "bg-primary/10 text-primary"
             )}>
               {icon}
             </div>
@@ -76,26 +67,11 @@ export function StatusCard({
         {processCounts && processCounts.length > 0 && (
           <>
             <Separator className="my-4" />
-            <div className="flex-1 space-y-3">
+            <div className="space-y-2">
               {processCounts.map((process, index) => (
-                <div key={index} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{process.name}</span>
-                    <span className="text-sm font-semibold">{process.count}</span>
-                  </div>
-                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div 
-                      className={cn(
-                        "h-full rounded-full transition-all duration-500",
-                        status === "positive" && "bg-green-500",
-                        status === "negative" && "bg-red-500",
-                        status === "neutral" && "bg-blue-500"
-                      )}
-                      style={{ 
-                        width: `${(process.count / (value as number)) * 100}%`,
-                      }}
-                    />
-                  </div>
+                <div key={index} className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-muted-foreground">{process.name}</span>
+                  <span className="font-semibold">- {process.count}</span>
                 </div>
               ))}
             </div>
