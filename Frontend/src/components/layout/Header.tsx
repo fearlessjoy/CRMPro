@@ -54,17 +54,15 @@ export function Header() {
   return (
     <header className="border-b h-16 flex items-center justify-between px-6 bg-background">
       <div className="w-[300px]">
-        <Button
-          variant="outline"
-          className="w-full justify-start text-muted-foreground"
-          onClick={() => setOpen(true)}
-        >
-          <Search className="mr-2 h-4 w-4" />
-          <span>Search...</span>
-          <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </Button>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search..." 
+            className="pl-8 h-9 w-[280px]"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
       </div>
 
       <div className="flex items-center space-x-4">
@@ -89,26 +87,27 @@ export function Header() {
         <Separator orientation="vertical" className="h-8" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+            <Button variant="ghost" className="flex items-center gap-2 h-9">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={currentUser?.photoURL || ''} alt={currentUser?.displayName || 'User'} />
-                <AvatarFallback>{getUserInitials()}</AvatarFallback>
+                <AvatarImage src={currentUser?.photoURL || ""} alt="Profile picture" />
+                <AvatarFallback className="bg-primary/10 text-primary">{getUserInitials()}</AvatarFallback>
               </Avatar>
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-medium">{currentUser?.displayName || "User"}</span>
+                <ChevronDown className="h-4 w-4" />
+              </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56" align="end" forceMount>
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{currentUser?.displayName}</p>
-                <p className="text-xs leading-none text-muted-foreground">
-                  {currentUser?.email}
-                </p>
-              </div>
-            </DropdownMenuLabel>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
-              Log out
+            <DropdownMenuItem onClick={() => navigate("/settings/user")}>Profile</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/settings")}>Settings</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => window.open("/lead-login", "_blank")}>
+              Lead Portal Login
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout}>Log out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
